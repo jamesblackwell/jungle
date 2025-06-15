@@ -35,6 +35,9 @@ class JungleWorktreeManager:
             elif args.command == 'branches':
                 self._list_recent_branches(args.limit)
                 return
+            elif args.command == 'switch':
+                self._switch_worktree(args.branch)
+                return
             elif args.command == 'list' or args.command is None:
                 git_root = self._find_git_root()
                 worktrees = self._discover_worktrees(git_root)
@@ -481,6 +484,67 @@ class JungleWorktreeManager:
         # Legend
         self.console.print("[dim]Legend: 🌿 Has worktree  📍 Local  📡 Remote[/dim]")
     
+    def _switch_worktree(self, worktree_name):
+        try:
+            git_root = self._find_git_root()
+            worktrees = self._discover_worktrees(git_root)
+            
+            # Find the target worktree
+            target_worktree = None
+            for worktree_path in worktrees:
+                # Match by branch name or directory name
+                branch = self._get_current_branch(worktree_path)
+                worktree_basename = os.path.basename(worktree_path)
+                
+                if worktree_name in [branch, worktree_basename, worktree_path]:
+                    target_worktree = worktree_path
+                    break
+                
+                # Also try matching without the trees/ prefix
+                if worktree_path.endswith(f"/{worktree_name}"):
+                    target_worktree = worktree_path
+                    break
+            
+            if not target_worktree:
+                self.console.print(f"[red]Error: Worktree '{worktree_name}' not found[/red]")
+                self.console.print("\n[dim]Available worktrees:[/dim]")
+                worktree_data = self._collect_worktree_data(worktrees)
+                self._display_compact(worktree_data)
+                return
+            
+            # Get absolute path
+            abs_path = os.path.abspath(target_worktree)
+            branch = self._get_current_branch(target_worktree)
+            
+            # Since we can't change the parent shell's directory from Python,
+            # we'll provide instructions and copy the path to clipboard if possible
+            self.console.print(f"[green]🌿[/green] Switch to worktree: [blue]{branch}[/blue]")
+            self.console.print(f"[cyan]📁 Path: {abs_path}[/cyan]\n")
+            
+            # Try to copy to clipboard
+            try:
+                if sys.platform == "darwin":  # macOS
+                    subprocess.run(['pbcopy'], input=f"cd '{abs_path}'", text=True, check=True)
+                    self.console.print("[dim]💾 Command copied to clipboard![/dim]")
+                elif sys.platform.startswith("linux"):  # Linux
+                    subprocess.run(['xclip', '-selection', 'clipboard'], input=f"cd '{abs_path}'", text=True, check=True)
+                    self.console.print("[dim]💾 Command copied to clipboard![/dim]")
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+            
+            # Show the command to run
+            self.console.print(f"[bold]Run this command:[/bold]")
+            self.console.print(f"[yellow]cd '{abs_path}'[/yellow]")
+            
+            # Show additional helpful commands
+            self.console.print(f"\n[dim]Quick commands for this worktree:[/dim]")
+            self.console.print(f"[dim]  git status[/dim]")
+            self.console.print(f"[dim]  git log --oneline -5[/dim]")
+            
+        except Exception as e:
+            self.console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+    
     def _show_help(self):
         help_text = """
 [bold cyan]🌿 Jungle - Git Worktree Manager[/bold cyan]
@@ -493,6 +557,7 @@ class JungleWorktreeManager:
   [cyan]new[/cyan] <branch>      Create worktree (creates branch if needed)
   [cyan]delete[/cyan] <name>     Delete worktree (with merge safety check)
   [cyan]remove[/cyan] <name>     Same as delete
+  [cyan]switch[/cyan] <name>     Switch to worktree directory
   [cyan]branches[/cyan]          List recent branches by activity
   [cyan]help[/cyan]              Show this help message
 
@@ -509,6 +574,7 @@ class JungleWorktreeManager:
   [dim]jungle new bugfix --path ./fix[/dim]  # Create worktree at custom path
   [dim]jungle delete feature-login[/dim]    # Delete worktree (with safety check)
   [dim]jungle remove bugfix --force[/dim]   # Force delete without merge check
+  [dim]jungle switch feature-login[/dim]    # Switch to worktree (copies cd command)
   [dim]jungle branches[/dim]           # Show recent branches by activity
   [dim]jungle branches --limit 5[/dim]     # Show only 5 most recent branches
 
@@ -533,7 +599,7 @@ class JungleWorktreeManager:
 
 def main():
     parser = argparse.ArgumentParser(description='Git Worktree Manager', add_help=False)
-    parser.add_argument('command', nargs='?', choices=['list', 'new', 'delete', 'remove', 'branches', 'help'], default='list')
+    parser.add_argument('command', nargs='?', choices=['list', 'new', 'delete', 'remove', 'switch', 'branches', 'help'], default='list')
     parser.add_argument('branch', nargs='?', help='Branch/worktree name')
     parser.add_argument('--table', action='store_true', help='Use table format')
     parser.add_argument('--path', help='Custom path for new worktree')
@@ -551,6 +617,11 @@ def main():
     if args.command in ['delete', 'remove'] and not args.branch:
         print("Error: Worktree name required for 'delete/remove' command")
         print("Usage: jungle delete <worktree-name> [--force]")
+        sys.exit(1)
+    
+    if args.command == 'switch' and not args.branch:
+        print("Error: Worktree name required for 'switch' command")
+        print("Usage: jungle switch <worktree-name>")
         sys.exit(1)
     
     jungle = JungleWorktreeManager()
