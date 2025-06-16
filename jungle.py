@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os
 import argparse
+import shutil
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -245,6 +246,9 @@ class JungleWorktreeManager:
                 )
                 self.console.print(f"[green]✓[/green] Created new branch [blue]{branch_name}[/blue] with worktree at [cyan]{path}[/cyan]")
             
+            # Copy .env file if it exists
+            self._copy_env_file(git_root, path)
+            
             # Show updated list
             worktrees = self._discover_worktrees(git_root)
             worktree_data = self._collect_worktree_data(worktrees)
@@ -283,6 +287,20 @@ class JungleWorktreeManager:
             
         except subprocess.CalledProcessError:
             return False
+    
+    def _copy_env_file(self, git_root, worktree_path):
+        """Copy .env file from git root to new worktree if it exists"""
+        try:
+            env_source = os.path.join(git_root, '.env')
+            env_dest = os.path.join(worktree_path, '.env')
+            
+            if os.path.exists(env_source):
+                shutil.copy2(env_source, env_dest)
+                self.console.print(f"[dim]📄 Copied .env to worktree[/dim]")
+            
+        except Exception as e:
+            # Don't fail worktree creation if .env copy fails
+            self.console.print(f"[yellow]⚠️  Could not copy .env file: {e}[/yellow]")
     
     def _delete_worktree(self, worktree_name, force=False):
         try:
