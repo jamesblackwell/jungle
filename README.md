@@ -20,12 +20,14 @@ pip install -e .
 ## 📖 Usage
 
 ### List Worktrees (Default)
+
 ```bash
 jungle                    # Compact mobile-friendly list
 jungle --table           # Traditional table format
 ```
 
 ### Create Worktree
+
 ```bash
 jungle new feature/login  # Creates branch + worktree at ./trees/feature-login
 jungle new existing-branch # Creates worktree for existing branch
@@ -33,21 +35,29 @@ jungle new branch --path ./custom  # Custom path
 ```
 
 ### Delete Worktree
+
 ```bash
 jungle delete feature-login        # Safe delete with merge check
 jungle remove branch --force       # Skip merge safety check
 ```
 
 ### Browse Branches
+
 ```bash
 jungle branches              # Show 10 recent branches by activity
 jungle branches --limit 5    # Show only 5 branches
 ```
 
+### Debug Information
+
+```bash
+jungle status                # Show comprehensive debug information
+```
+
 ## 📊 Status Indicators
 
 - ✅ **Clean** - No changes
-- ❗ **Modified** - Unstaged changes  
+- ❗ **Modified** - Unstaged changes
 - 🔵 **Staged** - Staged changes
 - ❓ **Untracked** - Untracked files
 - 🔄 **Mixed** - Multiple types of changes
@@ -61,19 +71,21 @@ jungle branches --limit 5    # Show only 5 branches
 ## 🏗️ Organization
 
 Jungle keeps your project clean by:
+
 - Storing all worktrees in `./trees/` directory
 - Using branch names as folder names (with `/` → `-`)
 - Making it easy to add `trees/` to `.gitignore`
 
 ## 🔧 Commands
 
-| Command | Description |
-|---------|-------------|
-| `jungle` | List all worktrees (default) |
-| `jungle new <branch>` | Create worktree (creates branch if needed) |
-| `jungle delete <name>` | Delete worktree with safety checks |
-| `jungle branches` | List recent branches by activity |
-| `jungle help` | Show help message |
+| Command                | Description                                |
+| ---------------------- | ------------------------------------------ |
+| `jungle`               | List all worktrees (default)               |
+| `jungle new <branch>`  | Create worktree (creates branch if needed) |
+| `jungle delete <name>` | Delete worktree with safety checks         |
+| `jungle branches`      | List recent branches by activity           |
+| `jungle status`        | Show comprehensive debug information       |
+| `jungle help`          | Show help message                          |
 
 ## 🤝 Perfect For
 
@@ -92,4 +104,4 @@ Jungle keeps your project clean by:
 
 ---
 
-*Made with ❤️ for developers who live in worktrees*
+_Made with ❤️ for developers who live in worktrees_

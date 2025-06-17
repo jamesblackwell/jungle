@@ -39,6 +39,9 @@ class JungleWorktreeManager:
             elif args.command == 'switch':
                 self._switch_worktree(args.branch)
                 return
+            elif args.command == 'status':
+                self._show_status()
+                return
             elif args.command == 'list' or args.command is None:
                 git_root = self._find_git_root()
                 worktrees = self._discover_worktrees(git_root)
@@ -563,6 +566,252 @@ class JungleWorktreeManager:
             self.console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
     
+    def _show_status(self):
+        """Display comprehensive debug information about the Git repository and environment"""
+        try:
+            self.console.print("[bold cyan]🔍 Jungle Status - Debug Information[/bold cyan]\n")
+            
+            # System Information
+            self.console.print("[bold yellow]📱 System Information[/bold yellow]")
+            self.console.print(f"  Platform: {sys.platform}")
+            self.console.print(f"  Python: {sys.version.split()[0]}")
+            self.console.print(f"  Current Directory: {os.getcwd()}")
+            self.console.print(f"  User: {os.getenv('USER', 'unknown')}")
+            self.console.print(f"  Home: {os.getenv('HOME', 'unknown')}")
+            self.console.print()
+            
+            # Git Repository Information
+            git_root = self._find_git_root()
+            self.console.print("[bold yellow]🌿 Git Repository Information[/bold yellow]")
+            self.console.print(f"  Git Root: {git_root}")
+            self.console.print(f"  Relative Path: {os.path.relpath(git_root, os.getcwd())}")
+            
+            # Git configuration
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'config', '--get', 'user.name'], 
+                                      capture_output=True, text=True, check=True)
+                git_user = result.stdout.strip()
+            except subprocess.CalledProcessError:
+                git_user = "Not set"
+            
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'config', '--get', 'user.email'], 
+                                      capture_output=True, text=True, check=True)
+                git_email = result.stdout.strip()
+            except subprocess.CalledProcessError:
+                git_email = "Not set"
+            
+            self.console.print(f"  Git User: {git_user}")
+            self.console.print(f"  Git Email: {git_email}")
+            
+            # Remote information
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'remote', '-v'], 
+                                      capture_output=True, text=True, check=True)
+                if result.stdout.strip():
+                    self.console.print("  Remotes:")
+                    for line in result.stdout.strip().split('\n'):
+                        self.console.print(f"    {line}")
+                else:
+                    self.console.print("  Remotes: None")
+            except subprocess.CalledProcessError:
+                self.console.print("  Remotes: Error retrieving")
+            
+            self.console.print()
+            
+            # Current Branch and HEAD Information
+            self.console.print("[bold yellow]🎯 Current Context[/bold yellow]")
+            current_branch = self._get_current_branch(os.getcwd())
+            self.console.print(f"  Current Branch: {current_branch}")
+            
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'rev-parse', 'HEAD'], 
+                                      capture_output=True, text=True, check=True)
+                head_sha = result.stdout.strip()
+                self.console.print(f"  HEAD SHA: {head_sha[:12]}...")
+            except subprocess.CalledProcessError:
+                self.console.print("  HEAD SHA: Unable to retrieve")
+            
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'describe', '--tags', '--always'], 
+                                      capture_output=True, text=True, check=True)
+                description = result.stdout.strip()
+                self.console.print(f"  Description: {description}")
+            except subprocess.CalledProcessError:
+                self.console.print("  Description: No tags found")
+            
+            self.console.print()
+            
+            # Worktree Information
+            worktrees = self._discover_worktrees(git_root)
+            self.console.print(f"[bold yellow]🌳 Worktree Information[/bold yellow]")
+            self.console.print(f"  Total Worktrees: {len(worktrees)}")
+            self.console.print(f"  Main Worktree: {git_root}")
+            
+            if len(worktrees) > 1:
+                self.console.print("  Additional Worktrees:")
+                for worktree in worktrees[1:]:
+                    branch = self._get_current_branch(worktree)
+                    status, color = self._get_worktree_status(worktree)
+                    self.console.print(f"    {worktree}")
+                    self.console.print(f"      Branch: {branch}")
+                    self.console.print(f"      Status: [{color}]{status}[/{color}]")
+            else:
+                self.console.print("  Additional Worktrees: None")
+            
+            self.console.print()
+            
+            # Trees Directory Information
+            self.console.print("[bold yellow]📁 Trees Directory[/bold yellow]")
+            trees_dir = os.path.join(os.getcwd(), "trees")
+            trees_abs = os.path.abspath(trees_dir)
+            self.console.print(f"  Trees Path: {trees_abs}")
+            self.console.print(f"  Exists: {os.path.exists(trees_dir)}")
+            
+            if os.path.exists(trees_dir):
+                try:
+                    entries = os.listdir(trees_dir)
+                    self.console.print(f"  Entries: {len(entries)}")
+                    if entries:
+                        self.console.print("  Contents:")
+                        for entry in sorted(entries)[:10]:  # Show first 10
+                            entry_path = os.path.join(trees_dir, entry)
+                            if os.path.isdir(entry_path):
+                                self.console.print(f"    📁 {entry}")
+                            else:
+                                self.console.print(f"    📄 {entry}")
+                        if len(entries) > 10:
+                            self.console.print(f"    ... and {len(entries) - 10} more")
+                except PermissionError:
+                    self.console.print("  Contents: Permission denied")
+            
+            self.console.print()
+            
+            # Branch Statistics
+            self.console.print("[bold yellow]📊 Branch Statistics[/bold yellow]")
+            try:
+                # Count local branches
+                result = subprocess.run(['git', '-C', git_root, 'branch', '--list'], 
+                                      capture_output=True, text=True, check=True)
+                local_branches = len([line for line in result.stdout.strip().split('\n') if line.strip()])
+                self.console.print(f"  Local Branches: {local_branches}")
+            except subprocess.CalledProcessError:
+                self.console.print("  Local Branches: Error counting")
+            
+            try:
+                # Count remote branches
+                result = subprocess.run(['git', '-C', git_root, 'branch', '-r', '--list'], 
+                                      capture_output=True, text=True, check=True)
+                remote_branches = len([line for line in result.stdout.strip().split('\n') if line.strip() and not 'HEAD' in line])
+                self.console.print(f"  Remote Branches: {remote_branches}")
+            except subprocess.CalledProcessError:
+                self.console.print("  Remote Branches: Error counting")
+            
+            try:
+                # Count stashes
+                result = subprocess.run(['git', '-C', git_root, 'stash', 'list'], 
+                                      capture_output=True, text=True, check=True)
+                stashes = len([line for line in result.stdout.strip().split('\n') if line.strip()])
+                self.console.print(f"  Stashes: {stashes}")
+            except subprocess.CalledProcessError:
+                self.console.print("  Stashes: 0")
+            
+            self.console.print()
+            
+            # File System Information
+            self.console.print("[bold yellow]💾 File System[/bold yellow]")
+            
+            # Check for common files
+            common_files = ['.env', '.gitignore', 'package.json', 'requirements.txt', 'Cargo.toml', 'pom.xml', 'go.mod']
+            found_files = []
+            for file in common_files:
+                if os.path.exists(os.path.join(git_root, file)):
+                    found_files.append(file)
+            
+            if found_files:
+                self.console.print(f"  Project Files: {', '.join(found_files)}")
+            else:
+                self.console.print("  Project Files: None detected")
+            
+            # Check .env file specifically (since jungle copies it)
+            env_file = os.path.join(git_root, '.env')
+            if os.path.exists(env_file):
+                try:
+                    stat = os.stat(env_file)
+                    import datetime
+                    mod_time = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                    self.console.print(f"  .env File: Exists (modified {mod_time})")
+                except:
+                    self.console.print("  .env File: Exists")
+            else:
+                self.console.print("  .env File: Not found")
+            
+            # Git ignore info
+            gitignore_file = os.path.join(git_root, '.gitignore')
+            if os.path.exists(gitignore_file):
+                try:
+                    with open(gitignore_file, 'r') as f:
+                        content = f.read()
+                        if 'trees' in content.lower():
+                            self.console.print("  .gitignore: Contains 'trees' pattern ✓")
+                        else:
+                            self.console.print("  .gitignore: No 'trees' pattern found")
+                except:
+                    self.console.print("  .gitignore: Exists but unreadable")
+            else:
+                self.console.print("  .gitignore: Not found")
+            
+            self.console.print()
+            
+            # Recent Activity
+            self.console.print("[bold yellow]⏰ Recent Activity[/bold yellow]")
+            try:
+                result = subprocess.run(['git', '-C', git_root, 'log', '--oneline', '-5', '--all'], 
+                                      capture_output=True, text=True, check=True)
+                if result.stdout.strip():
+                    self.console.print("  Recent Commits:")
+                    for line in result.stdout.strip().split('\n'):
+                        self.console.print(f"    {line}")
+                else:
+                    self.console.print("  Recent Commits: None")
+            except subprocess.CalledProcessError:
+                self.console.print("  Recent Commits: Error retrieving")
+            
+            self.console.print()
+            
+            # Performance/Health Checks
+            self.console.print("[bold yellow]⚡ Health Checks[/bold yellow]")
+            
+            # Check if git is working
+            try:
+                subprocess.run(['git', '--version'], capture_output=True, check=True)
+                self.console.print("  Git Command: [green]✓ Working[/green]")
+            except:
+                self.console.print("  Git Command: [red]✗ Not working[/red]")
+            
+            # Check repository integrity
+            try:
+                subprocess.run(['git', '-C', git_root, 'fsck', '--no-progress'], 
+                              capture_output=True, check=True, timeout=5)
+                self.console.print("  Repository Integrity: [green]✓ OK[/green]")
+            except subprocess.TimeoutExpired:
+                self.console.print("  Repository Integrity: [yellow]⏳ Check timeout[/yellow]")
+            except subprocess.CalledProcessError:
+                self.console.print("  Repository Integrity: [red]✗ Issues found[/red]")
+            except:
+                self.console.print("  Repository Integrity: [yellow]? Unable to check[/yellow]")
+            
+            # Check worktree list command
+            try:
+                subprocess.run(['git', '-C', git_root, 'worktree', 'list'], 
+                              capture_output=True, check=True)
+                self.console.print("  Worktree Command: [green]✓ Working[/green]")
+            except:
+                self.console.print("  Worktree Command: [red]✗ Not working[/red]")
+            
+        except Exception as e:
+            self.console.print(f"[red]Error generating status: {e}[/red]")
+
     def _show_help(self):
         help_text = """
 [bold cyan]🌿 Jungle - Git Worktree Manager[/bold cyan]
@@ -577,6 +826,7 @@ class JungleWorktreeManager:
   [cyan]remove[/cyan] <name>     Same as delete
   [cyan]switch[/cyan] <name>     Switch to worktree directory
   [cyan]branches[/cyan]          List recent branches by activity
+  [cyan]status[/cyan]            Show comprehensive debug information
   [cyan]help[/cyan]              Show this help message
 
 [bold]OPTIONS:[/bold]
@@ -595,6 +845,7 @@ class JungleWorktreeManager:
   [dim]jungle switch feature-login[/dim]    # Switch to worktree (copies cd command)
   [dim]jungle branches[/dim]           # Show recent branches by activity
   [dim]jungle branches --limit 5[/dim]     # Show only 5 most recent branches
+  [dim]jungle status[/dim]             # Show comprehensive debug information
 
 [bold]STATUS SYMBOLS:[/bold]
   [green]✓[/green] Clean       [yellow]?[/yellow] Untracked files
@@ -617,7 +868,7 @@ class JungleWorktreeManager:
 
 def main():
     parser = argparse.ArgumentParser(description='Git Worktree Manager', add_help=False)
-    parser.add_argument('command', nargs='?', choices=['list', 'new', 'delete', 'remove', 'switch', 'branches', 'help'], default='list')
+    parser.add_argument('command', nargs='?', choices=['list', 'new', 'delete', 'remove', 'switch', 'branches', 'status', 'help'], default='list')
     parser.add_argument('branch', nargs='?', help='Branch/worktree name')
     parser.add_argument('--table', action='store_true', help='Use table format')
     parser.add_argument('--path', help='Custom path for new worktree')
